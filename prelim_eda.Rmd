@@ -1,0 +1,22 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r libs, message=FALSE, warning=FALsE}
+library(tidyverse)
+library(googledrive)
+library(googlesheets)
+library(tictoc)
+```
+
+```{r}
+tic()
+all <- drive_find(n_max = 10)
+toc()
+```
+
+
+
+
