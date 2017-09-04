@@ -4,19 +4,76 @@ output: html_notebook
 ---
 
 
-```{r libs, message=FALSE, warning=FALsE}
+```{r libs, message=FALSE, warning=FALSE}
 library(tidyverse)
 library(googledrive)
 library(googlesheets)
-library(tictoc)
+library(lubridate)
+library(cowplot)
+theme_set(theme_gray())
 ```
+
+```{r get_files}
+cached = TRUE
+if (cached) {
+    files <- readRDS('all.rds')
+} else {
+    files <- drive_find()
+    saveRDS(files, 'all.rds')
+}
+```
+
+Let's look at accumulation over time by count and size. Note that file size is only counted for files that are stored in native format (i.e. not Google Docs)
+
+```{r time}
+files <- files %>% googledrive:::promote('createdTime')
+plot_by_date <- files %>% 
+    mutate(createdTime = ymd_hms(createdTime),
+           `Cumulative Doc Count` = row_number(createdTime)) %>% 
+    ggplot(aes(createdTime, `Cumulative Doc Count`, group=1)) + geom_line() + geom_point() +
+    ggtitle('Accumulation by file count')
+
+files <- files %>% googledrive:::promote('quotaBytesUsed') %>% 
+    mutate(q_size = as.numeric(quotaBytesUsed))
+plot_by_size <- files %>% 
+    arrange(createdTime) %>%
+    mutate (createdTime = ymd_hms(createdTime),
+            `Cumulative File Size` = cumsum(q_size)) %>% 
+    ggplot(aes(createdTime, `Cumulative File Size`, group=1)) + geom_line() + geom_point() +
+    ggtitle('Accumulation by file size')
+plot_grid(plot_by_date, plot_by_size)
+```
+
+Interesting. There seem to be several days where a lot of files got added to my Drive. I use the Drive desktop app which automatically syncs files from my PC, so maybe I got a little careless about adding files into that folder. It's also noteworthy that the size explosion and count explosions don't always occur on the same days, so I'll need to look at those separately.  
+
+Let's start with largest files, and see which Drive paths contain them.
 
 ```{r}
-tic()
-all <- drive_find(n_max = 10)
-toc()
+fat_files <- files %>% 
+    arrange(-q_size) %>%
+    top_n(10, q_size) %>%
+    drive_reveal(what = 'path') %>%
+    googledrive:::promote('quotaBytesUsed') %>%  #drive_reveal crunched our dribble 
+    mutate(q_size = as.numeric(quotaBytesUsed))
+fat_files %>% count(path
 ```
 
+There are a couple of files there I don't need or could get online, but otherwise this makes me just want to go watch a few family vids. So a little savings are possible, but nothing much overly noteworthy. The zz_GitHub looks like something I shouldn't be paying to keep around.
 
+Let's look at the files by the chronological order they were added and look at the days with the most volume:
 
+```{r}
+fat_days <- files %>% mutate(create_date = createdTime %>% as.Date() %>% as.character()) %>%
+    count(create_date, sort = TRUE) %>%
+    top_n(10, n)
+fat_day_sample <- files %>% 
+    mutate(create_date = createdTime %>% as.Date() %>% as.character()) %>%
+    semi_join(fat_days) %>%
+    group_by(create_date) %>%
+    mutate(shuffle = sample(n())) %>%
+    top_n(5, shuffle) 
+fat_days %>% count(path)
+```
+
+That's a lot of files. Looking up paths can take a long time with the `drive_re
 
