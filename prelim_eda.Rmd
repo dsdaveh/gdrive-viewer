@@ -6,9 +6,11 @@ output: html_notebook
 
 ```{r libs, message=FALSE, warning=FALSE}
 library(tidyverse)
+library(stringr)
 library(googledrive)
 library(googlesheets)
 library(lubridate)
+library(data.tree)
 library(cowplot)
 theme_set(theme_gray())
 ```
@@ -23,9 +25,9 @@ if (cached) {
 }
 ```
 
-Let's look at accumulation over time by count and size. Note that file size is only counted for files that are stored in native format (i.e. not Google Docs)
+Let's look at both count and size accumulation over time. Note that file size is only counted for files that are stored in native format (i.e. not Google Docs)
 
-```{r time}
+```{r plot_time}
 files <- files %>% googledrive:::promote('createdTime')
 plot_by_date <- files %>% 
     mutate(createdTime = ymd_hms(createdTime),
@@ -48,32 +50,62 @@ Interesting. There seem to be several days where a lot of files got added to my 
 
 Let's start with largest files, and see which Drive paths contain them.
 
-```{r}
+```{r plot_largest}
 fat_files <- files %>% 
     arrange(-q_size) %>%
     top_n(10, q_size) %>%
     drive_reveal(what = 'path') %>%
     googledrive:::promote('quotaBytesUsed') %>%  #drive_reveal crunched our dribble 
     mutate(q_size = as.numeric(quotaBytesUsed))
-fat_files %>% count(path
+fat_files %>% count(path)
 ```
 
 There are a couple of files there I don't need or could get online, but otherwise this makes me just want to go watch a few family vids. So a little savings are possible, but nothing much overly noteworthy. The zz_GitHub looks like something I shouldn't be paying to keep around.
 
-Let's look at the files by the chronological order they were added and look at the days with the most volume:
+Let's look at the files by the chronological order they were added and look at the days with the most volume.
 
-```{r}
+```{r large_files}
 fat_days <- files %>% mutate(create_date = createdTime %>% as.Date() %>% as.character()) %>%
     count(create_date, sort = TRUE) %>%
     top_n(10, n)
+fat_days
+```
+
+That's a lot of files. There probably some folders here that are adding a lot of unnecessary files. Looking up paths can take a long time with the `drive_reveal`. So I want to take a the approach of sampling files added on the days we just identified above. On the assumption that something caused large folders to get added to my drive, this should help me identify those.
+
+```{r large_folders}
+set.seed(199)
 fat_day_sample <- files %>% 
     mutate(create_date = createdTime %>% as.Date() %>% as.character()) %>%
     semi_join(fat_days) %>%
     group_by(create_date) %>%
     mutate(shuffle = sample(n())) %>%
-    top_n(5, shuffle) 
-fat_days %>% count(path)
+    top_n(5, shuffle) %>%
+    drive_reveal(what = 'path')
+
+#prune until any children of a node don't have a minimum threshold
+prune_min <- 20 #Clone doesn't have ...
+pruneFunction <- function(x) {
+    if (isLeaf(x)) return(FALSE)
+    if (x$totalCount < prune_min) return(FALSE)
+    return( x$totalCount >= prune_min )
+}
+    
+tree <- as.Node(fat_day_sample, pathName = "path")
+pruned <- Clone(tree, pruneFun = pruneFunction)
+print(pruned, '.originalTotalCount')
 ```
 
-That's a lot of files. Looking up paths can take a long time with the `drive_re
+```{r get_folders}
+folders <- files %>% 
+    drive_reveal(what = 'mime_type') %>% 
+    filter(str_detect(mime_type,'apps.folder$')) %>%
+    drive_reveal(what = 'path') 
+```
+```{r}
+ftree <- as.Node(folders, pathName = "path")
+prune_min <- 50 #Clone doesn't have ...
+fpruned <- Clone(ftree, pruneFun = pruneFunction)
+print(fpruned, '.originalTotalCount')
+```
 
