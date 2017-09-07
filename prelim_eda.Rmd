@@ -40,6 +40,8 @@ plot_by_date <- files %>%
 
 files <- files %>% googledrive:::promote('quotaBytesUsed') %>% 
     mutate(q_size = as.numeric(quotaBytesUsed))
+total_size <- sum(files$q_size)
+
 plot_by_size <- files %>% 
     arrange(createdTime) %>%
     mutate (createdTime = ymd_hms(createdTime),
@@ -51,6 +53,8 @@ plot_grid(plot_by_date, plot_by_size)
 
 Interesting. There seem to be several days where a lot of files got added to my Drive. I use the Drive desktop app which automatically syncs files from my PC, so maybe I got a little careless about adding files into that folder. It's also noteworthy that the size explosion and count explosions don't always occur on the same days, so I'll need to look at those separately.  
 
+Total quota file size is `r round(total_size / 1e9, 1)` GB.
+
 Let's start with largest files, and see which Drive paths contain them.
 
 ```{r plot_largest}
@@ -59,8 +63,8 @@ fat_files <- files %>%
     top_n(10, q_size) %>%
     drive_reveal(what = 'path') %>%
     googledrive:::promote('quotaBytesUsed') %>%  #drive_reveal crunched our dribble 
-    mutate(q_size = as.numeric(quotaBytesUsed))
-fat_files %>% count(path)
+    mutate(sizeGB = round(as.numeric(quotaBytesUsed) / 1e9, 2))
+fat_files %>% select(path, sizeGB)
 ```
 
 There are a couple of files there I don't need or could get online, but otherwise this makes me just want to go watch a few family vids. So a little savings are possible, but nothing much overly noteworthy. The zz_GitHub looks like something I shouldn't be paying to keep around.
@@ -123,4 +127,5 @@ prune_min <- 10 #Clone doesn't have ...
 fpruned <- Clone(ftree, pruneFun = pruneFunction)
 print(fpruned, 'totalCount', 'origCount', pruneMethod = 'dist', limit = NULL)
 ```
+
 
