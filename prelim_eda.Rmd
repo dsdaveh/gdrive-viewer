@@ -12,16 +12,19 @@ library(googlesheets)
 library(lubridate)
 library(data.tree)
 library(cowplot)
+library(tictoc)
 theme_set(theme_gray())
 ```
 
 ```{r get_files}
-cached = TRUE
+cached = FALSE
 if (cached) {
     files <- readRDS('all.rds')
 } else {
+    tic()
     files <- drive_find()
     saveRDS(files, 'all.rds')
+    toc()
 }
 ```
 
@@ -75,16 +78,18 @@ That's a lot of files. There probably some folders here that are adding a lot of
 
 ```{r large_folders}
 set.seed(199)
+tic()
 fat_day_sample <- files %>% 
     mutate(create_date = createdTime %>% as.Date() %>% as.character()) %>%
     semi_join(fat_days) %>%
     group_by(create_date) %>%
     mutate(shuffle = sample(n())) %>%
-    top_n(5, shuffle) %>%
+    top_n(10, shuffle) %>%
     drive_reveal(what = 'path')
+toc()
 
 #prune until any children of a node don't have a minimum threshold
-prune_min <- 20 #Clone doesn't have ...
+prune_min <- 15 #Clone doesn't have ...
 pruneFunction <- function(x) {
     if (isLeaf(x)) return(FALSE)
     if (x$totalCount < prune_min) return(FALSE)
@@ -93,19 +98,29 @@ pruneFunction <- function(x) {
     
 tree <- as.Node(fat_day_sample, pathName = "path")
 pruned <- Clone(tree, pruneFun = pruneFunction)
-print(pruned, '.originalTotalCount')
+print(pruned, 'totalCount', pruneMethod = 'dist', limit = NULL)
 ```
 
 ```{r get_folders}
-folders <- files %>% 
-    drive_reveal(what = 'mime_type') %>% 
-    filter(str_detect(mime_type,'apps.folder$')) %>%
-    drive_reveal(what = 'path') 
+cache_folders <- TRUE
+if (cache_folders) {
+    folders <- readRDS('folders.rds')
+} else {
+    tic()
+    folders <- files %>% 
+        drive_reveal(what = 'mime_type') %>% 
+        filter(str_detect(mime_type,'apps.folder$')) %>%
+        drive_reveal(what = 'path') 
+    saveRDS(folders, 'folders.rds')
+    toc()
+}
+
 ```
 ```{r}
 ftree <- as.Node(folders, pathName = "path")
-prune_min <- 50 #Clone doesn't have ...
+ftree$Do(function(x) x$origCount <- x$count)
+prune_min <- 10 #Clone doesn't have ...
 fpruned <- Clone(ftree, pruneFun = pruneFunction)
-print(fpruned, '.originalTotalCount')
+print(fpruned, 'totalCount', 'origCount', pruneMethod = 'dist', limit = NULL)
 ```
 
