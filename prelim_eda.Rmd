@@ -17,7 +17,7 @@ theme_set(theme_gray())
 ```
 
 ```{r get_files}
-cached = FALSE
+cached = TRUE
 if (cached) {
     files <- readRDS('all.rds')
 } else {
