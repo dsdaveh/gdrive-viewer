@@ -18,12 +18,13 @@ theme_set(theme_gray())
 
 ```{r get_files}
 cached = TRUE
-if (cached) {
-    files <- readRDS('all.rds')
+cache_all <- 'all.rds'
+if (file.exists(cache_all) & cached) {
+    files <- readRDS(cache_all)
 } else {
     tic()
     files <- drive_find()
-    saveRDS(files, 'all.rds')
+    saveRDS(files, cache_all)
     toc()
 }
 ```
