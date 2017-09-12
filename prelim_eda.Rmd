@@ -183,7 +183,18 @@ files_otherized %>%
 ```
 
 ```{r}
-
+#NOT COMPLETE
+plot_cum_types <- files_otherized %>% 
+    mutate(create_date = as.Date(ymd_hms(createdTime))) %>%
+    filter(create_date > ymd('2017-01-01')) %>%
+    group_by(create_date, mime_type) %>%
+    summarize(count = n(),
+              total_size = sum(q_size)) %>% 
+    group_by(mime_type) %>% arrange(create_date) %>%
+    mutate( cum_count = cumsum(count),
+            cum_size = cumsum(total_size)) %>%
+    ggplot(aes(create_date, cum_count, color = mime_type)) + geom_line()
+plot_cum_types
 ```
 
 
