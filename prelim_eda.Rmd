@@ -19,7 +19,7 @@ theme_set(theme_gray())
 ```{r get_files}
 cached = TRUE
 cache_all <- 'all.rds'
-if (file.exists(cache_all) & cached) {
+if (file.exists(cache_all) && cached) {
     files <- readRDS(cache_all)
 } else {
     tic()
@@ -79,7 +79,7 @@ fat_days <- files %>% mutate(create_date = createdTime %>% as.Date() %>% as.char
 fat_days
 ```
 
-That's a lot of files. There probably some folders here that are adding a lot of unnecessary files. Looking up paths can take a long time with the `drive_reveal`. So I want to take a the approach of sampling files added on the days we just identified above. On the assumption that something caused large folders to get added to my drive, this should help me identify those.
+That's a lot of files. There are probably some folders here that are adding a lot of unnecessary files. Looking up paths can take a long time with the `drive_reveal`. So I want to take a the approach of sampling files added on the days we just identified above. On the assumption that something caused large folders to get added to my drive, this should help me identify those.
 
 ```{r large_folders}
 set.seed(199)
@@ -108,15 +108,16 @@ print(pruned, 'totalCount', pruneMethod = 'dist', limit = NULL)
 
 ```{r get_folders}
 cache_folders <- TRUE
-if (cache_folders) {
-    folders <- readRDS('folders.rds')
+cache_folders_file <- 'folders.rds'
+if (cache_folders && file.exists(cache_folders_file)) {
+    folders <- readRDS(cache_folders_file)
 } else {
     tic()
     folders <- files %>% 
         drive_reveal(what = 'mime_type') %>% 
         filter(str_detect(mime_type,'apps.folder$')) %>%
         drive_reveal(what = 'path') 
-    saveRDS(folders, 'folders.rds')
+    saveRDS(folders, cache_folders_file)
     toc()
 }
 
@@ -127,6 +128,62 @@ ftree$Do(function(x) x$origCount <- x$count)
 prune_min <- 10 #Clone doesn't have ...
 fpruned <- Clone(ftree, pruneFun = pruneFunction)
 print(fpruned, 'totalCount', 'origCount', pruneMethod = 'dist', limit = NULL)
+```
+
+```{r}
+files <- files %>% drive_reveal(what = 'mime_type')
+```
+```{r}
+file_types <- files %>%
+    group_by(mime_type) %>%
+    summarize(count = n(),
+              total_size = sum(q_size)) %>%
+    arrange( -count)
+file_types
+```
+
+```{r}
+top_ftype <- 10
+file_types %>%
+    top_n(top_ftype, count) %>%
+    mutate(mime_type = reorder(mime_type, count)) %>%
+    ggplot(aes(mime_type, count)) + geom_col() + coord_flip() 
+
+```
+
+```{r}
+top_ftype <- 10
+file_types %>%
+    arrange(total_size) %>%
+    top_n(top_ftype, total_size) %>%
+    mutate(mime_type = reorder(mime_type, total_size)) %>%
+    ggplot(aes(mime_type, total_size)) + geom_col() + coord_flip() 
+
+```
+
+
+```{r}
+top_ftype <- 10
+top_mime_types <- file_types %>%
+    top_n(top_ftype, count) %>%
+    select(mime_type) %>% .[[1]]
+top_mime_types
+```
+
+```{r}
+files_otherized <- files %>%
+    mutate(mime_type = ifelse(mime_type %in% top_mime_types, mime_type, 'Other')) 
+files_otherized %>%
+    group_by(mime_type) %>%
+    summarize(count = n(),
+              total_size = sum(q_size)) %>%
+    arrange( -count) %>%
+    mutate(mime_type = reorder(mime_type, count)) %>%
+    ggplot(aes(mime_type, count)) + geom_col() + coord_flip() 
+```
+
+```{r}
+
 ```
 
 
