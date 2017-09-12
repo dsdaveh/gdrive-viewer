@@ -33,7 +33,7 @@ Let's look at both count and size accumulation over time. Note that file size is
 
 ```{r plot_time}
 files <- files %>% googledrive:::promote('createdTime')
-plot_by_date <- files %>% 
+plot_by_count <- files %>% 
     mutate(createdTime = ymd_hms(createdTime),
            `Cumulative Doc Count` = row_number(createdTime)) %>% 
     ggplot(aes(createdTime, `Cumulative Doc Count`, group=1)) + geom_line() + geom_point() +
@@ -49,7 +49,7 @@ plot_by_size <- files %>%
             `Cumulative File Size` = cumsum(q_size)) %>% 
     ggplot(aes(createdTime, `Cumulative File Size`, group=1)) + geom_line() + geom_point() +
     ggtitle('Accumulation by file size')
-plot_grid(plot_by_date, plot_by_size)
+plot_grid(plot_by_count, plot_by_size)
 ```
 
 Interesting. There seem to be several days where a lot of files got added to my Drive. I use the Drive desktop app which automatically syncs files from my PC, so maybe I got a little careless about adding files into that folder. It's also noteworthy that the size explosion and count explosions don't always occur on the same days, so I'll need to look at those separately.  
