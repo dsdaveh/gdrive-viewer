@@ -183,7 +183,6 @@ files_otherized %>%
 ```
 
 ```{r}
-#NOT COMPLETE
 files_cum <- files %>% 
     arrange(createdTime) %>%
     mutate(create_date = as.Date(ymd_hms(createdTime)),
