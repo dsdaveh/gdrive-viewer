@@ -184,17 +184,45 @@ files_otherized %>%
 
 ```{r}
 #NOT COMPLETE
-plot_cum_types <- files_otherized %>% 
+files_cum <- files %>% 
+    arrange(createdTime) %>%
+    mutate(create_date = as.Date(ymd_hms(createdTime)),
+           `Cumulative Doc Count` = row_number(createdTime),
+           `Cumulative File Size` = cumsum(q_size)) 
+
+
+cum_types <- files_otherized %>% 
     mutate(create_date = as.Date(ymd_hms(createdTime))) %>%
-    filter(create_date > ymd('2017-01-01')) %>%
+    #filter(create_date > ymd('2017-01-01')) %>%
     group_by(create_date, mime_type) %>%
     summarize(count = n(),
               total_size = sum(q_size)) %>% 
+    ungroup() %>%
+    complete(create_date, mime_type, fill = list(count = 0, total_size = 0)) %>%
     group_by(mime_type) %>% arrange(create_date) %>%
     mutate( cum_count = cumsum(count),
-            cum_size = cumsum(total_size)) %>%
-    ggplot(aes(create_date, cum_count, color = mime_type)) + geom_line()
-plot_cum_types
+            cum_size = cumsum(total_size)) 
+cum_all <- cum_types %>% ungroup() %>%
+    group_by(create_date) %>%
+    summarize( day_count = sum(count),  
+               day_size = sum(total_size)) %>%
+    ungroup() %>% arrange(create_date) %>%
+    mutate( count_all = cumsum(day_count),
+            size_all = cumsum(day_size))
+    
+plot_cum_counts <- cum_types %>%
+    ggplot(aes(create_date, cum_count)) +
+    geom_area(aes(fill = mime_type)) +
+    geom_line(data = files_cum, aes(create_date, `Cumulative Doc Count`, group=1)) + 
+    geom_point(data = files_cum, aes(create_date, `Cumulative Doc Count`, group=1))
+plot_cum_counts
 ```
 
-
+```{r}
+plot_cum_size <- cum_types %>%
+    ggplot(aes(create_date, cum_size)) +
+    geom_area(aes(fill = mime_type)) +
+    geom_line(data = files_cum, aes(create_date, `Cumulative File Size`, group=1)) + 
+    geom_point(data = files_cum, aes(create_date, `Cumulative File Size`, group=1))
+plot_cum_size
+```
