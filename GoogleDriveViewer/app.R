@@ -34,14 +34,31 @@ ui <- fluidPage(
    
    # Sidebar with a slider input for number of bins 
    sidebarLayout(
-      sidebarPanel(
-         actionButton("authenticate", label = "Authenticate"), #TODO add GDrive icon
-         dateRangeInput("date_filter", "Date Range", start = '2001-01-01', end = today()),
-         numericInput("n_types", "Max MIME types", 6, min = 1, step = 1),
-         radioButtons("view_type", "Plot Type", choices = c('Doc count', 'Doc size')),
-         actionButton("trend", label = "Plot Trend")
-      ),
-      
+       sidebarPanel(
+           wellPanel(
+               actionButton("authenticate", label = "Authenticate"), #TODO add GDrive icon
+               dateRangeInput("date_filter", "Date Range", start = '2001-01-01', end = today()),
+               numericInput("n_types", "Max MIME types", 6, min = 1, step = 1),
+               radioButtons("view_type", "Plot Type", choices = c('Doc count', 'Doc size')),
+               actionButton("trend", label = "Plot Trend")),
+           wellPanel(
+               withTags({
+                   div(class="header", checked=NA,
+                       p("Download and run locally from",
+                       a(href="https://github.com/dsdaveh/gdrive-viewer", "GitHub"))
+                   )
+               })),
+           wellPanel(
+               withTags({
+                   div(class="header", checked=NA,
+                       h4("Project Construction Notes"),
+                       li("Authenticate not running on server"),
+                       li("Date range not functional"),
+                       li("Other functionality coming...")
+                   )
+               }))
+       ),
+       
       # Show a plot of the generated distribution
       mainPanel(
          plotOutput("distPlot")
