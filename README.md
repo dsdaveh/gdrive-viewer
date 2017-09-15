@@ -1,6 +1,9 @@
-# gdrive-viewer
+# gdrive-viewer - WORK IN PROGRESS
 
-<span style="color:red; font-size: 40px;">Work In Progress</span><br>
+```diff
+- There is still a lot of placeholder content on this page
+```
+
 <span style="color:red;">There is still a lot of placeholder content on this page</span>
 
 This repository contains several projects surrounding tools and working examples using the ridiculously useful [tidyverse googledrive](https://github.com/tidyverse/googledrive) package by Jenny Brian and Lucy McGowan:
