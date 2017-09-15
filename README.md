@@ -2,6 +2,7 @@
 
 ```diff
 - There is still a lot of placeholder content on this page
++ Expect it to evolve rapidly
 ```
 
 This repository contains several projects surrounding tools and working examples using the ridiculously useful [tidyverse googledrive](https://github.com/tidyverse/googledrive) package by Jenny Brian and Lucy McGowan:
