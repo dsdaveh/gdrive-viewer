@@ -22,17 +22,9 @@ theme_empty <- function() {
         )
 }
 
-# https://stackoverflow.com/questions/4245196/do-not-ignore-case-in-sorting-character-strings
-sortC <- function(...) {
-    a <- Sys.getlocale("LC_COLLATE")
-    on.exit(Sys.setlocale("LC_COLLATE", a))
-    Sys.setlocale("LC_COLLATE", "C")
-    sort(...)
-}
-sortClast <- function(x) {
-    CAPS <- grep("^[A-Z]", x)
-    c(sort(x[-CAPS]), sort(x[CAPS]))
-}
+user <- drive_user()
+is_me <- function() is.null(user) || user$emailAddress == 'dhurst79@gmail.com'
+ggsub_me <- 'This is a snapshot of my Drive. To view your own, click "Authenticate"\nNote: Authentication is done through Google, and no credentials are cached on the server'
 
 # Define UI for application that draws a histogram
 ui <- fluidPage(
@@ -71,15 +63,14 @@ server <- function(input, output) {
     
     files <- reactive({ 
         cat('files()', input$authenticate, '\n')
-        cached = FALSE #dev only
-        cache_all <- '../all.rds'
-        if (file.exists(cache_all) && cached) {
+        cached = is_me()
+        cache_all <- 'all.rds'
+        if (cached) {
             files <- readRDS(cache_all)
         } else {
             cat('drive_find...')
             tic()
             files <- drive_find()
-            saveRDS(files, cache_all)
             toc()
         }
         print(nrow(files))
@@ -97,11 +88,12 @@ server <- function(input, output) {
     observeEvent(input$authenticate, {
         cat('authenticate\n')
         drive_auth(reset = TRUE, cache = FALSE)
-        cat('set prog')
+        user <- drive_user()
+
         progress <- shiny::Progress$new()
         on.exit(progress$close())
+        
         progress$set(message = "Get file listing", value = 0.1)
-        cat('auth files')
         files()
         progress$set(message = "Create Plot", value = 0.4)
         output$distPlot <- plot_trend
@@ -117,9 +109,15 @@ server <- function(input, output) {
     
     plot_trend <- renderPlot({
         cat('plot_trend:\n')
+        ggsub_line <- ifelse(is_me(), ggsub_me, "")
         
+        progress_plot <- shiny::Progress$new()
+        on.exit(progress_plot$close())
+        
+        progress_plot$set(message = "Get file listing", value = 0.1)
         files_cum <- files() 
         
+        progress_plot$set(message = "Analyze MIME types", value = 0.5)
         file_types <- files_cum %>%
             group_by(mime_type) %>%
             summarize(count = n(),
@@ -134,6 +132,7 @@ server <- function(input, output) {
         files_otherized <- files_cum %>%
             mutate(mime_type = ifelse(mime_type %in% top_mime_types, mime_type, 'Other')) 
         
+        progress_plot$set(message = "Prepare plot data", value = 0.7)
         cum_types <- files_otherized %>%
             mutate(create_date = as.Date(ymd_hms(createdTime))) %>%
             #filter(create_date > ymd('2017-01-01')) %>%
@@ -153,6 +152,7 @@ server <- function(input, output) {
             mutate( count_all = cumsum(day_count),
                     size_all = cumsum(day_size))
         
+        progress_plot$set(message = "Plot data", value = 0.7)
         #todo ... this coule be done better with !!
         if (input$view_type == 'Doc count') {
             plot_cum <- cum_types %>%
@@ -160,20 +160,20 @@ server <- function(input, output) {
                 geom_area(aes(fill = mime_type)) +
                 geom_line(data = files_cum, aes(create_date, `Cumulative Doc Count`, group=1)) +
                 geom_point(data = files_cum, aes(create_date, `Cumulative Doc Count`, group=1)) +
-                ggtitle('Growth Trend by File Count')
+                ggtitle('Growth Trend by File Count', subtitle = ggsub_line)
         } else {
             plot_cum <- cum_types %>%
                 ggplot(aes(create_date, cum_size)) +
                 geom_point(data = files_cum, aes(create_date, `Cumulative File Size`, group=1)) +
                 geom_area(aes(fill = mime_type)) +
                 geom_line(data = files_cum, aes(create_date, `Cumulative File Size`, group=1)) + 
-                ggtitle('Growth Trend by File Size')
+                ggtitle('Growth Trend by File Size', subtitle = ggsub_line)
         }
         
         plot_cum   
     })
     
-    output$distPlot <- plot_none
+    output$distPlot <- plot_trend
 }
 
 # Run the application 
