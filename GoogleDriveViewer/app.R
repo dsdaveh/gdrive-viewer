@@ -22,9 +22,11 @@ theme_empty <- function() {
         )
 }
 
-drive_deauth()
-user <- drive_user()
-is_me <- function() is.null(user) || user$emailAddress == 'dhurst79@gmail.com'
+#link github issue shorthand
+lgi <- function(i) sprintf("https://github.com/dsdaveh/gdrive-viewer/issues/%d", i)
+
+#helpers
+is_me <- function(u) is.null(u) || u$emailAddress == 'o9e4g9@u.northwestern.edu' #'dhurst79@gmail.com'
 ggsub_me <- 'This is a snapshot of my Drive. To view your own, click "Authenticate"\nNote: Authentication is done through Google, and no credentials are cached on the server'
 
 # Define UI for application that draws a histogram
@@ -40,8 +42,7 @@ ui <- fluidPage(
                actionButton("authenticate", label = "Authenticate"), #TODO add GDrive icon
                dateRangeInput("date_filter", "Date Range", start = '2001-01-01', end = today()),
                numericInput("n_types", "Max MIME types", 6, min = 1, step = 1),
-               radioButtons("view_type", "Plot Type", choices = c('Doc count', 'Doc size')),
-               actionButton("trend", label = "Plot Trend")),
+               radioButtons("view_type", "Plot Type", choices = c('Doc count', 'Doc size'))),
            wellPanel(
                withTags({
                    div(class="header", checked=NA,
@@ -53,23 +54,28 @@ ui <- fluidPage(
                withTags({
                    div(class="header", checked=NA,
                        h4("Project Construction Notes"),
-                       li("Authenticate not running on server"),
-                       li(tags$del("Date range not functional")),
-                       li("Add MIME type selection"),
-                       li("Other functionality coming...")
+                       li(a("Authenticate not running on server", href = lgi(1))),
+                       li(tags$del(a("Date range not functional", href = lgi(2)))),
+                       li(tags$del(a("Add MIME type selection", href = lgi(4)))),
+                       li(a("Add Sharing info", href = lgi(5))),
+                       li(a("Optimize reactivity", href = lgi(8))),
+                       li(span("Other functionality coming... Have suggestion?",
+                               a("Create an issue", href = "https://github.com/dsdaveh/gdrive-viewer/issues")))
                    )
                }))
        ),
        
       # Show a plot of the generated distribution
       mainPanel(
-         plotOutput("distPlot")
+          plotOutput("distPlot"),
+          checkboxGroupInput("ignore_mime", label = "Ignore", choices = '...waiting for plot...', inline = TRUE ),
+          actionButton("update_trend", label = "Update Trend Plot")
       )
    )
 )
 
 # Define server logic required to draw a histogram
-server <- function(input, output) {
+server <- function(input, output, session) {
    
     #Inputs:
     # view_type: size | count
@@ -78,13 +84,16 @@ server <- function(input, output) {
     # [alt] last_n_days: integer > 0 ... implicit since/until
     # [alt] last_n_docs: integer > 0 ... implicit since/until
     # n_types: integer > 0 ... top n_types are listed explicitly, the rest become 'Other'
-    # ignore_types: character
+    # ignore_mime: character
+    
+    drive_deauth(verbose = FALSE)
+    user <- drive_user()
     
     #files() gets the drive file metadata (from googledrive or cache)
     find_results <- reactive({
         cat('find_results()', input$authenticate, '\n')
-        cached = is_me()
-        cache_all <- 'all.rds'
+        cached = is_me(user)
+        cache_all <- '../all.rds'
         if (cached) {
             files <- readRDS(cache_all)
         } else {
@@ -113,6 +122,24 @@ server <- function(input, output) {
             mutate(`Cumulative Doc Count` = row_number(createdTime),
                    `Cumulative File Size` = cumsum(q_size))
     })
+    
+    mime_types <- reactive({
+        cat('mime_types()\n')
+        
+        file_types <- files() %>%
+            group_by(mime_type) %>%
+            summarize(count = n(),
+                      total_size = sum(q_size)) %>%
+            arrange( -count)
+        
+        top_ftype <- input$n_types
+        top_mime_types <- file_types %>%
+            top_n(top_ftype, count) %>%
+            select(mime_type) %>% .[[1]]
+        
+        #add __Other__ if appropriate
+        top_mime_types
+    })
         
     observeEvent(input$authenticate, {
         cat('authenticate\n')
@@ -136,8 +163,10 @@ server <- function(input, output) {
     })
     
     plot_trend <- renderPlot({
+        cat(paste0('dbg: ', input$ignore_mime, '\n'))
+        trigger_update <- input$update_trend
         cat('plot_trend:\n')
-        ggsub_line <- ifelse(is_me(), ggsub_me, sprintf("Logged in %s", user$emailAddress))
+        ggsub_line <- ifelse(is_me(user), ggsub_me, sprintf("Logged in %s", user$emailAddress))
         
         progress_plot <- shiny::Progress$new()
         on.exit(progress_plot$close())
@@ -147,19 +176,11 @@ server <- function(input, output) {
         print(c('dbg_files_cum', nrow(files_cum)))
         
         progress_plot$set(message = "Analyze MIME types", value = 0.5)
-        file_types <- files_cum %>%
-            group_by(mime_type) %>%
-            summarize(count = n(),
-                      total_size = sum(q_size)) %>%
-            arrange( -count)
-
-        top_ftype <- input$n_types
-        top_mime_types <- file_types %>%
-            top_n(top_ftype, count) %>%
-            select(mime_type) %>% .[[1]]
-
         files_otherized <- files_cum %>%
-            mutate(mime_type = ifelse(mime_type %in% top_mime_types, mime_type, '__Other__')) 
+            mutate(mime_type = ifelse(mime_type %in% mime_types(), mime_type, '__Other__')) %>%
+            filter(! mime_type %in% input$ignore_mime) %>%
+            mutate(`Cumulative Doc Count` = row_number(createdTime),
+                   `Cumulative File Size` = cumsum(q_size))
         
         progress_plot$set(message = "Prepare plot data", value = 0.7)
         cum_types <- files_otherized %>%
@@ -187,19 +208,32 @@ server <- function(input, output) {
             plot_cum <- cum_types %>%
                 ggplot(aes(create_date, cum_count)) +
                 geom_area(aes(fill = mime_type)) +
-                geom_line(data = files_cum, aes(create_date, `Cumulative Doc Count`, group=1)) +
-                geom_point(data = files_cum, aes(create_date, `Cumulative Doc Count`, group=1)) +
+                geom_line(data = files_otherized, aes(create_date, `Cumulative Doc Count`, group=1)) +
+                geom_point(data = files_otherized, aes(create_date, `Cumulative Doc Count`, group=1)) +
                 ggtitle('Growth Trend by File Count', subtitle = ggsub_line)
         } else {
             plot_cum <- cum_types %>%
                 ggplot(aes(create_date, cum_size)) +
-                geom_point(data = files_cum, aes(create_date, `Cumulative File Size`, group=1)) +
+                geom_point(data = files_otherized, aes(create_date, `Cumulative File Size`, group=1)) +
                 geom_area(aes(fill = mime_type)) +
-                geom_line(data = files_cum, aes(create_date, `Cumulative File Size`, group=1)) + 
+                geom_line(data = files_otherized, aes(create_date, `Cumulative File Size`, group=1)) + 
                 ggtitle('Growth Trend by File Size', subtitle = ggsub_line)
         }
         
         plot_cum   
+    })
+    
+    #TODO remove
+    # ignore_mimes <- reactive({
+    #     cat(paste(input$ignore_mime, '\n'))
+    #     input$ignore_mime
+    # })
+    
+    observe({
+        updateCheckboxGroupInput(session, "ignore_mime", label = "Ignore",
+                                 choices = c('__Other__', mime_types()),
+                                 selected = input$ignore_mime, inline = TRUE )
+        
     })
     
     output$distPlot <- plot_trend
