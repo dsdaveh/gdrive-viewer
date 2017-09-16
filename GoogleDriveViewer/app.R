@@ -159,7 +159,7 @@ server <- function(input, output) {
             select(mime_type) %>% .[[1]]
 
         files_otherized <- files_cum %>%
-            mutate(mime_type = ifelse(mime_type %in% top_mime_types, mime_type, 'Other')) 
+            mutate(mime_type = ifelse(mime_type %in% top_mime_types, mime_type, '__Other__')) 
         
         progress_plot$set(message = "Prepare plot data", value = 0.7)
         cum_types <- files_otherized %>%
