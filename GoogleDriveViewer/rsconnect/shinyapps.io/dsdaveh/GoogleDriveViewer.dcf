@@ -3,9 +3,9 @@ title: GoogleDriveViewer
 account: dsdaveh
 server: shinyapps.io
 appId: 215193
-bundleId: 984241
+bundleId: 984749
 url: https://dsdaveh.shinyapps.io/GoogleDriveViewer/
-when: 1505538463.50799
+when: 1505604651.9544
 asMultiple: FALSE
 asStatic: FALSE
-ignoredFiles: .httr-oauth-SUSPENDED
+ignoredFiles: .httr-oauth-SUSPENDED|all_dhurst79.rds|all_o93469.rds

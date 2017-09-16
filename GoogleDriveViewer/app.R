@@ -93,7 +93,7 @@ server <- function(input, output, session) {
     find_results <- reactive({
         cat('find_results()', input$authenticate, '\n')
         cached = is_me(user)
-        cache_all <- '../all.rds'
+        cache_all <- 'all.rds'
         if (cached) {
             files <- readRDS(cache_all)
         } else {
