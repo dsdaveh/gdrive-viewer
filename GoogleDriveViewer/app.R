@@ -54,7 +54,8 @@ ui <- fluidPage(
                    div(class="header", checked=NA,
                        h4("Project Construction Notes"),
                        li("Authenticate not running on server"),
-                       li("Date range not functional"),
+                       li(tags$del("Date range not functional")),
+                       li("Add MIME type selection"),
                        li("Other functionality coming...")
                    )
                }))
@@ -79,8 +80,9 @@ server <- function(input, output) {
     # n_types: integer > 0 ... top n_types are listed explicitly, the rest become 'Other'
     # ignore_types: character
     
-    files <- reactive({ 
-        cat('files()', input$authenticate, '\n')
+    #files() gets the drive file metadata (from googledrive or cache)
+    find_results <- reactive({
+        cat('find_results()', input$authenticate, '\n')
         cached = is_me()
         cache_all <- 'all.rds'
         if (cached) {
@@ -92,20 +94,29 @@ server <- function(input, output) {
             toc()
         }
         print(nrow(files))
-        files %>% 
+        files
+    })
+    
+    files <- reactive({ 
+        cat('files()', input$authenticate, '\n')
+        
+        #add additional metadata
+        find_results() %>% 
             drive_reveal(what = 'mime_type') %>%
             googledrive:::promote('createdTime') %>% 
             googledrive:::promote('quotaBytesUsed') %>% 
             mutate(q_size = as.numeric(quotaBytesUsed)) %>%
             arrange(createdTime) %>%
-            mutate(create_date = as.Date(ymd_hms(createdTime)),
-                   `Cumulative Doc Count` = row_number(createdTime),
+            mutate(create_date = as.Date(ymd_hms(createdTime))) %>%
+            filter(create_date >= ymd(format(input$date_filter[1])),
+                   create_date <= ymd(format(input$date_filter[2]))) %>%
+            mutate(`Cumulative Doc Count` = row_number(createdTime),
                    `Cumulative File Size` = cumsum(q_size))
     })
         
     observeEvent(input$authenticate, {
         cat('authenticate\n')
-        drive_auth(reset = TRUE, cache = FALSE)
+        drive_auth(reset = TRUE, cache = FALSE) #, use_oob = TRUE)
         user <<- drive_user()
 
         progress <- shiny::Progress$new()
@@ -115,7 +126,6 @@ server <- function(input, output) {
         files()
         progress$set(message = "Create Plot", value = 0.4)
         output$distPlot <- plot_trend
-        Sys.sleep(5)
         progress$set(message = "Complete", value = 1)
     })
     
@@ -127,13 +137,14 @@ server <- function(input, output) {
     
     plot_trend <- renderPlot({
         cat('plot_trend:\n')
-        ggsub_line <- ifelse(is_me(), ggsub_me, "")
+        ggsub_line <- ifelse(is_me(), ggsub_me, sprintf("Logged in %s", user$emailAddress))
         
         progress_plot <- shiny::Progress$new()
         on.exit(progress_plot$close())
         
         progress_plot$set(message = "Get file listing", value = 0.1)
         files_cum <- files() 
+        print(c('dbg_files_cum', nrow(files_cum)))
         
         progress_plot$set(message = "Analyze MIME types", value = 0.5)
         file_types <- files_cum %>%
