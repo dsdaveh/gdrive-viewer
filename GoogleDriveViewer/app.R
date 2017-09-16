@@ -22,6 +22,7 @@ theme_empty <- function() {
         )
 }
 
+drive_deauth()
 user <- drive_user()
 is_me <- function() is.null(user) || user$emailAddress == 'dhurst79@gmail.com'
 ggsub_me <- 'This is a snapshot of my Drive. To view your own, click "Authenticate"\nNote: Authentication is done through Google, and no credentials are cached on the server'
@@ -105,7 +106,7 @@ server <- function(input, output) {
     observeEvent(input$authenticate, {
         cat('authenticate\n')
         drive_auth(reset = TRUE, cache = FALSE)
-        user <- drive_user()
+        user <<- drive_user()
 
         progress <- shiny::Progress$new()
         on.exit(progress$close())
