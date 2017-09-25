@@ -45,6 +45,11 @@ ui <- dashboardPage(
     dashboardHeader(title = "Google Drive Viewer", titleWidth = 200),
     
     dashboardSidebar(
+        sidebarMenu(
+            menuItem("Counts and Sizes", tabName = "counts"),
+            menuItem("Sharing", tabName = "sharing")
+        ),
+        hr(),
         actionButton("authenticate", label = "Authenticate"), #TODO add GDrive icon
         dateRangeInput("date_filter", "Date Range", start = '2001-01-01', end = today()),
         numericInput("n_types", "Max MIME types", 6, min = 1, step = 1),
@@ -59,7 +64,7 @@ ui <- dashboardPage(
         withTags({
             div(class="header", checked=NA,
                 h4("Project Construction Notes"),
-                li(a("Authenticate not running on server", href = lgi(1))),
+                li(a("Authenticate not running on shinyapps.io server", href = lgi(1))),
                 li(tags$del(a("Date range not functional", href = lgi(2)))),
                 li(tags$del(a("Add MIME type selection", href = lgi(4)))),
                 li(a("Add Sharing info", href = lgi(5))),
@@ -71,18 +76,22 @@ ui <- dashboardPage(
     ),
         
     dashboardBody(
-        fluidRow( 
-            valueBoxOutput('fileCount'),
-            valueBoxOutput('folderCount'),
-            valueBoxOutput('quotaSize')),
-        fluidRow(
-            radioButtons("filterValues", "Filter Summary by Selected MIME Types", inline = TRUE, 
-                         choices = c('Yes', 'No'), selected = 'No')),
-        fluidRow(
-            box( width = 12, 
-                 plotOutput("distPlot"),
-                 checkboxGroupInput("ignore_mime", label = "Ignore MIME types", choices = '...waiting for plot...', inline = TRUE ),
-                 actionButton("update_trend", label = "Update Trend Plot"))
+        tabItems(
+            tabItem(tabName = "counts", h2("File Counts and Quota Usage"),
+                    fluidRow( 
+                        valueBoxOutput('fileCount'),
+                        valueBoxOutput('folderCount'),
+                        valueBoxOutput('quotaSize')),
+                    fluidRow(
+                        radioButtons("filterValues", "Filter Summary by Selected MIME Types", inline = TRUE, 
+                                     choices = c('Yes', 'No'), selected = 'No')),
+                    fluidRow(
+                        box( width = 12, 
+                             plotOutput("distPlot"),
+                             checkboxGroupInput("ignore_mime", label = "Ignore MIME types", choices = '...waiting for plot...', inline = TRUE ),
+                             actionButton("update_trend", label = "Update Trend Plot"))
+                    )),
+            tabItem(tabName = "sharing", h2("File Sharing"))
         )
     )
     
