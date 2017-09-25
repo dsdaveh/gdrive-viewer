@@ -71,14 +71,17 @@ ui <- dashboardPage(
     ),
         
     dashboardBody(
-        fluidRow(
+        fluidRow( 
             valueBoxOutput('fileCount'),
             valueBoxOutput('folderCount'),
             valueBoxOutput('quotaSize')),
         fluidRow(
+            radioButtons("filterValues", "Filter Summary by Selected MIME Types", inline = TRUE, 
+                         choices = c('Yes', 'No'), selected = 'No')),
+        fluidRow(
             box( width = 12, 
                  plotOutput("distPlot"),
-                 checkboxGroupInput("ignore_mime", label = "Ignore", choices = '...waiting for plot...', inline = TRUE ),
+                 checkboxGroupInput("ignore_mime", label = "Ignore MIME types", choices = '...waiting for plot...', inline = TRUE ),
                  actionButton("update_trend", label = "Update Trend Plot"))
         )
     )
@@ -133,6 +136,19 @@ server <- function(input, output, session) {
                    `Cumulative File Size` = cumsum(q_size))
     })
     
+    files_mime_filter <- reactive({
+        cat('files_mime_filter()\n')
+        
+        mime_filter <- ''
+        if (input$filterValues == 'Yes') mime_filter <- input$ignore_mime
+
+        files() %>%
+            mutate(mime_type = ifelse(mime_type %in% mime_types(), mime_type, '__Other__')) %>%
+            filter(! mime_type %in% mime_filter) %>%
+            mutate(`Cumulative Doc Count` = row_number(createdTime),
+                   `Cumulative File Size` = cumsum(q_size))
+    })
+        
     mime_types <- reactive({
         cat('mime_types()\n')
         
@@ -251,7 +267,15 @@ server <- function(input, output, session) {
         valueBox(files() %>% filter(str_detect(mime_type, 'google-apps.folder')) %>% nrow(), "Folder Count")
     })
     output$quotaSize <- renderValueBox({
-        valueBox(sprintf('%g GB', round(sum(files()$q_size) / 1e9, 1)), "Size")
+        qsize <- sum(files_mime_filter()$q_size)
+        print(c('qsize', qsize))
+        if (qsize < 1e5) {
+            valueBox(sprintf('%g KB', round(qsize / 1e3, 1)), "Size")
+        } else if (qsize < 1e8) {
+            valueBox(sprintf('%g MB', round(qsize / 1e6, 1)), "Size")
+        } else {
+            valueBox(sprintf('%g GB', round(qsize / 1e9, 1)), "Size")
+        }
     })
     output$distPlot <- plot_trend
 }
