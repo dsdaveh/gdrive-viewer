@@ -9,6 +9,9 @@ library(tictoc)
 theme_set(theme_gray())
 
 library(shiny)
+library(shinydashboard)
+
+sessionInfo()
 
 theme_empty <- function() {
     theme_bw() %+replace%
@@ -22,6 +25,12 @@ theme_empty <- function() {
         )
 }
 
+tiny_mime <- function(x) {
+    x %>%
+        str_replace('^application/', 'app../') %>%
+        str_replace('/vnd.google-apps.', '/..google..')
+}
+
 #link github issue shorthand
 lgi <- function(i) sprintf("https://github.com/dsdaveh/gdrive-viewer/issues/%d", i)
 
@@ -30,51 +39,52 @@ is_me <- function(u) is.null(u) || u$emailAddress == 'o9e4g9@u.northwestern.edu'
 ggsub_me <- 'This is a snapshot of my Drive. To view your own, click "Authenticate"\nNote: Authentication is done through Google, and no credentials are cached on the server'
 
 # Define UI for application that draws a histogram
-ui <- fluidPage(
-   
-   # Application title
-   titlePanel("Google Drive Viewer"),
-   
-   # Sidebar with a slider input for number of bins 
-   sidebarLayout(
-       sidebarPanel(
-           wellPanel(
-               actionButton("authenticate", label = "Authenticate"), #TODO add GDrive icon
-               dateRangeInput("date_filter", "Date Range", start = '2001-01-01', end = today()),
-               numericInput("n_types", "Max MIME types", 6, min = 1, step = 1),
-               radioButtons("view_type", "Plot Type", choices = c('Doc count', 'Doc size'))),
-           wellPanel(
-               withTags({
-                   div(class="header", checked=NA,
-                       p("Download and run locally from",
-                       a(href="https://github.com/dsdaveh/gdrive-viewer", "GitHub"))
-                   )
-               })),
-           wellPanel(
-               withTags({
-                   div(class="header", checked=NA,
-                       h4("Project Construction Notes"),
-                       li(a("Authenticate not running on server", href = lgi(1))),
-                       li(tags$del(a("Date range not functional", href = lgi(2)))),
-                       li(tags$del(a("Add MIME type selection", href = lgi(4)))),
-                       li(a("Add Sharing info", href = lgi(5))),
-                       li(a("Optimize reactivity", href = lgi(8))),
-                       li(span("Other functionality coming... Have suggestion?",
-                               a("Create an issue", href = "https://github.com/dsdaveh/gdrive-viewer/issues")))
-                   )
-               }))
-       ),
-       
-      # Show a plot of the generated distribution
-      mainPanel(
-          plotOutput("distPlot"),
-          checkboxGroupInput("ignore_mime", label = "Ignore", choices = '...waiting for plot...', inline = TRUE ),
-          actionButton("update_trend", label = "Update Trend Plot")
-      )
-   )
+ui <- dashboardPage(
+
+    # Application title
+    dashboardHeader(title = "Google Drive Viewer", titleWidth = 200),
+    
+    dashboardSidebar(
+        actionButton("authenticate", label = "Authenticate"), #TODO add GDrive icon
+        dateRangeInput("date_filter", "Date Range", start = '2001-01-01', end = today()),
+        numericInput("n_types", "Max MIME types", 6, min = 1, step = 1),
+        radioButtons("view_type", "Plot Type", choices = c('Doc count', 'Doc size')),
+        
+        withTags({
+            div(class="header", checked=NA,
+                p("Download and run locally from",
+                  a(href="https://github.com/dsdaveh/gdrive-viewer", "GitHub"))
+            )
+        }),
+        withTags({
+            div(class="header", checked=NA,
+                h4("Project Construction Notes"),
+                li(a("Authenticate not running on server", href = lgi(1))),
+                li(tags$del(a("Date range not functional", href = lgi(2)))),
+                li(tags$del(a("Add MIME type selection", href = lgi(4)))),
+                li(a("Add Sharing info", href = lgi(5))),
+                li(a("Optimize reactivity", href = lgi(8))),
+                li(span("Other functionality coming... Have suggestion?",
+                        a("Create an issue", href = "https://github.com/dsdaveh/gdrive-viewer/issues")))
+            )
+        })
+    ),
+        
+    dashboardBody(
+        fluidRow(
+            valueBoxOutput('fileCount'),
+            valueBoxOutput('folderCount'),
+            valueBoxOutput('quotaSize')),
+        fluidRow(
+            box( width = 12, 
+                 plotOutput("distPlot"),
+                 checkboxGroupInput("ignore_mime", label = "Ignore", choices = '...waiting for plot...', inline = TRUE ),
+                 actionButton("update_trend", label = "Update Trend Plot"))
+        )
+    )
+    
 )
 
-# Define server logic required to draw a histogram
 server <- function(input, output, session) {
    
     #Inputs:
@@ -163,7 +173,6 @@ server <- function(input, output, session) {
     })
     
     plot_trend <- renderPlot({
-        cat(paste0('dbg: ', input$ignore_mime, '\n'))
         trigger_update <- input$update_trend
         cat('plot_trend:\n')
         ggsub_line <- ifelse(is_me(user), ggsub_me, sprintf("Logged in %s", user$emailAddress))
@@ -173,8 +182,7 @@ server <- function(input, output, session) {
         
         progress_plot$set(message = "Get file listing", value = 0.1)
         files_cum <- files() 
-        print(c('dbg_files_cum', nrow(files_cum)))
-        
+
         progress_plot$set(message = "Analyze MIME types", value = 0.5)
         files_otherized <- files_cum %>%
             mutate(mime_type = ifelse(mime_type %in% mime_types(), mime_type, '__Other__')) %>%
@@ -236,8 +244,18 @@ server <- function(input, output, session) {
         
     })
     
+    output$fileCount <- renderValueBox({
+        valueBox(files() %>% nrow(), "File Count")
+    })
+    output$folderCount <- renderValueBox({
+        valueBox(files() %>% filter(str_detect(mime_type, 'google-apps.folder')) %>% nrow(), "Folder Count")
+    })
+    output$quotaSize <- renderValueBox({
+        valueBox(sprintf('%g GB', round(sum(files()$q_size) / 1e9, 1)), "Size")
+    })
     output$distPlot <- plot_trend
 }
+
 
 # Run the application 
 shinyApp(ui = ui, server = server)
