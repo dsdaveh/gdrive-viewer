@@ -19,7 +19,13 @@ library(cowplot)
 library(tictoc)
 theme_set(theme_gray())
 
+# library(network)
+# library(sna)
+#library(GGally)
 library(igraph)
+
+
+
 ```
 
 ```{r get_files}
@@ -51,25 +57,50 @@ shared <- files %>% filter(shared)
 # there are only one 'owners' per file
 # proof: purrr::map_int(files$drive_resource, function(.x) length(.x$owners)) %>% sum() == nrow(files)
 pals <- rep(NA, nrow(shared))
-net <- graph.empty(n = 1, directed = TRUE)
-V(net)$name <- me
+dnet <- graph.empty(n = 1, directed = TRUE)
+V(dnet)$name <- me
 
 for (i in 1:nrow(shared)) { ## need to purrrfect this
+#for (i in 1:17) {
     xx <- shared[i, ]$drive_resource[[1]]$permissions
     pals[i] <- purrr::map_chr(xx, function(.x) #.x$type) %>% paste(collapse = ',')
         ifelse(.x$type == 'user', .x$emailAddress, .x$type)) %>% setdiff(me) %>% paste(collapse = ',')
     all_names <- str_split(pals[i], ',') %>% unlist()
     if (length(all_names) == 1 && str_length(all_names) == 0) next # special case: file shared not write
-    new_names <- setdiff( all_names, V(net)$name)
+    new_names <- setdiff( all_names, V(dnet)$name)
     if (length(new_names) == 0) next # special case: we know all these guys already
-    for(newv in new_names) net <- net + newv
+    for(newv in new_names) dnet <- dnet + newv
     owner <- shared[i, ]$drive_resource[[1]]$owners[[1]]$emailAddress
     shared_with <- setdiff( c(me, all_names), owner)
     shares <- rep(owner, length(shared_with) * 2); shares[seq(2, length(shared_with) * 2, 2)] <- shared_with #has to be a more elegant way
-    net <- add.edges(net, shares)
+    dnet <- igraph::add.edges(dnet, shares)
 }
-plot(net)
+```
+```{r}
+ggnet2(simplify(dnet))
 
+com <- cluster_spinglass(dnet, spins=5)
+V(dnet)$color <- com$membership+1
+
+ix_me <- grep(me, V(dnet)$name)
+ix_anyone <- grep('^anyone$', V(dnet)$name)
+
+V(dnet)$color[ix_me] <- 'yellow'
+V(dnet)$color[ix_anyone] <- 'black'
+
+v_size <- 3
+V(dnet)$size <- v_size
+V(dnet)$size[ix_me] <- v_size * 2
+
+
+plot(dnet, vertex.label=NA, edge.arrow.size = 0.2, curved=TRUE)
+
+net = rgraph(10, mode = "graph", tprob = 0.5)
+net = network(net, directed = FALSE)
+
+# vertex names
+network.vertex.names(net) = letters[1:10]
+ggnet2(net)
 
 ```
 
