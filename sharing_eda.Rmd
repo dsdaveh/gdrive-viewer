@@ -1,0 +1,76 @@
+---
+title: "Analysis of my Google Drive files (WIP)"
+author: "Dave Hurst"
+output:
+  html_notebook: default
+  html_document:
+    keep_md: yes
+---
+
+
+```{r libs, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(stringr)
+library(googledrive)
+library(googlesheets)
+library(lubridate)
+library(data.tree)
+library(cowplot)
+library(tictoc)
+theme_set(theme_gray())
+
+library(igraph)
+```
+
+```{r get_files}
+cached = TRUE
+if (! exists('cache_all')) cache_all <- 'all.rds'
+if (file.exists(cache_all) && cached) {
+    files <- readRDS(cache_all)
+} else {
+    tic()
+    files <- drive_find()
+    saveRDS(files, cache_all)
+    toc()
+}
+```
+
+Let's look at both count and size accumulation over time. Note that file size is only counted for files that are stored in native format (i.e. not Google Docs)
+
+```{r plot_time}
+files <- files %>% googledrive:::promote('createdTime')
+files <- files %>% googledrive:::promote('shared')
+files <- files %>% googledrive:::promote('ownedByMe')
+files <- files %>% drive_reveal(what = 'mime_type') 
+
+n_shared <- sum(files$shared) 
+drive_auth()
+me <- drive_user()$emailAddress
+shared <- files %>% filter(shared)
+
+# there are only one 'owners' per file
+# proof: purrr::map_int(files$drive_resource, function(.x) length(.x$owners)) %>% sum() == nrow(files)
+pals <- rep(NA, nrow(shared))
+net <- graph.empty(n = 1, directed = TRUE)
+V(net)$name <- me
+
+for (i in 1:nrow(shared)) { ## need to purrrfect this
+    xx <- shared[i, ]$drive_resource[[1]]$permissions
+    pals[i] <- purrr::map_chr(xx, function(.x) #.x$type) %>% paste(collapse = ',')
+        ifelse(.x$type == 'user', .x$emailAddress, .x$type)) %>% setdiff(me) %>% paste(collapse = ',')
+    all_names <- str_split(pals[i], ',') %>% unlist()
+    if (length(all_names) == 1 && str_length(all_names) == 0) next # special case: file shared not write
+    new_names <- setdiff( all_names, V(net)$name)
+    if (length(new_names) == 0) next # special case: we know all these guys already
+    for(newv in new_names) net <- net + newv
+    owner <- shared[i, ]$drive_resource[[1]]$owners[[1]]$emailAddress
+    shared_with <- setdiff( c(me, all_names), owner)
+    shares <- rep(owner, length(shared_with) * 2); shares[seq(2, length(shared_with) * 2, 2)] <- shared_with #has to be a more elegant way
+    net <- add.edges(net, shares)
+}
+plot(net)
+
+
+```
+
+
