@@ -22,6 +22,8 @@ theme_set(theme_gray())
 # library(network)
 # library(sna)
 #library(GGally)
+library(networkD3)
+library(randomNames) 
 library(igraph)
 
 
@@ -100,4 +102,7 @@ V(dnet)$size <- log(deg+3) * 2
 plot(dnet, vertex.label=NA, edge.arrow.size = 0.2, curved=TRUE)
 ```
 
+```{r}
+
+```
 
