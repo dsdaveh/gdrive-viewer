@@ -25,9 +25,6 @@ theme_set(theme_gray())
 library(networkD3)
 library(randomNames) 
 library(igraph)
-
-
-
 ```
 
 ```{r get_files}
