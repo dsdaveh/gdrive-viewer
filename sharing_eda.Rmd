@@ -25,6 +25,7 @@ theme_set(theme_gray())
 library(networkD3)
 library(randomNames) 
 library(igraph)
+library(visNetwork)
 ```
 
 ```{r get_files}
@@ -100,6 +101,38 @@ plot(dnet, vertex.label=NA, edge.arrow.size = 0.2, curved=TRUE)
 ```
 
 ```{r}
+#shared_orig <- shared
+#shared <- shared [1:10, ]
+people <- me
+parse_email <- function(email) { 
+    # str_replace is for demo (causes a potential error ... similiar handles, different domains treated as same people)
+    str_replace(email, "@.*", "") 
+}
 
+for (i in 1:nrow(shared)) { ## need to purrrfect this
+    #for (i in 1:17) {
+    xx <- shared[i, ]$drive_resource[[1]]$permissions
+    pals[i] <- purrr::map_chr(xx, function(.x) #.x$type) %>% paste(collapse = ',')
+        ifelse(.x$type == 'user', .x$emailAddress, .x$type)) %>% setdiff(me) %>% paste(collapse = ',')
+    all_names <- str_split(pals[i], ',') %>% unlist() %>% parse_email()
+    people <- c(people, all_names) %>% unique()
+}
+
+share_with_df <- tibble()
+for (i in 1:nrow(shared)) { ## need to purrrfect this
+    #for (i in 1:17) {
+    xx <- shared[i, ]$drive_resource[[1]]$permissions
+    if(is.null(xx)) next  # gap? Files shared with anyone not added to my Drive
+    owner <- shared[i, ]$drive_resource[[1]]$owners[[1]]$emailAddress %>% parse_email()
+    for (j in 1:length(xx)) {
+        if (xx[[j]]$role == 'owner') next
+        share_with_df <- bind_rows(share_with_df,
+                                   tibble(from = owner, to = xx[[j]]$emailAddress %>% parse_email()))
+    } 
+    
+}
+people2 <- c(share_with_df$to, share_with_df$from) %>% unique() 
+swu <- unique(share_with_df)
+vn <- visNetwork(data.frame(id = people2, title = people2), swu)
 ```
 
