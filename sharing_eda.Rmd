@@ -102,7 +102,7 @@ plot(dnet, vertex.label=NA, edge.arrow.size = 0.2, curved=TRUE)
 
 ```{r}
 #shared_orig <- shared
-#shared <- shared [1:10, ]
+#shared <- shared [1:20, ]
 
 share_with_df <- tibble()
 for (i in 1:nrow(shared)) { ## need to purrrfect this
