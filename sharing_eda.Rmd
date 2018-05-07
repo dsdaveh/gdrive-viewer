@@ -103,36 +103,48 @@ plot(dnet, vertex.label=NA, edge.arrow.size = 0.2, curved=TRUE)
 ```{r}
 #shared_orig <- shared
 #shared <- shared [1:10, ]
-people <- me
-parse_email <- function(email) { 
-    # str_replace is for demo (causes a potential error ... similiar handles, different domains treated as same people)
-    str_replace(email, "@.*", "") 
-}
-
-for (i in 1:nrow(shared)) { ## need to purrrfect this
-    #for (i in 1:17) {
-    xx <- shared[i, ]$drive_resource[[1]]$permissions
-    pals[i] <- purrr::map_chr(xx, function(.x) #.x$type) %>% paste(collapse = ',')
-        ifelse(.x$type == 'user', .x$emailAddress, .x$type)) %>% setdiff(me) %>% paste(collapse = ',')
-    all_names <- str_split(pals[i], ',') %>% unlist() %>% parse_email()
-    people <- c(people, all_names) %>% unique()
-}
 
 share_with_df <- tibble()
 for (i in 1:nrow(shared)) { ## need to purrrfect this
     #for (i in 1:17) {
     xx <- shared[i, ]$drive_resource[[1]]$permissions
     if(is.null(xx)) next  # gap? Files shared with anyone not added to my Drive
-    owner <- shared[i, ]$drive_resource[[1]]$owners[[1]]$emailAddress %>% parse_email()
+    owner <- shared[i, ]$drive_resource[[1]]$owners[[1]]$emailAddress 
     for (j in 1:length(xx)) {
+        sprintf("type = %s\n", xx[[j]]$type)
         if (xx[[j]]$role == 'owner') next
+        ptype <- xx[[j]]$type
+        sharee <- ifelse(ptype == 'user', xx[[j]]$emailAddress, ptype)  # {name} or 'anyone'
+        if (sharee == me) ptype = 'me'
         share_with_df <- bind_rows(share_with_df,
-                                   tibble(from = owner, to = xx[[j]]$emailAddress %>% parse_email()))
+                                   tibble(from = owner, to = sharee, group = ptype, arrows = 'to' ))
     } 
     
 }
-people2 <- c(share_with_df$to, share_with_df$from) %>% unique() 
+nodes <- tibble( id = c(share_with_df$to, share_with_df$from) %>% unique()) %>%
+    mutate( title = str_replace(id, "@.*", ""),
+            group = str_replace(id, ".*@", ""),
+            shape = case_when(id == me ~ 'diamond', id == 'anyone' ~ 'square', TRUE ~ 'circle'))
+            #label = ifelse(id == me, 'me', ''))
+
+#group counts
+domain_count <- nodes %>% count(group) %>% arrange(desc(n))
+keep <- domain_count$group %>% head(5) %>% c('anyone')
+
+scale_width <- function(x, z = 10) { 
+    x0 <- x - min(x)
+    xz <- x0 * (z - 1) / max(x0)
+    zz <- xz + 1
+}
+nodes <- nodes %>%
+    mutate(group = ifelse(group %in% keep, group, 'other'))
+
+edges <- share_with_df %>%
+    group_by(from, to, group, arrows) %>%
+    summarise(width = n()) %>% ungroup %>%
+    mutate(width = scale_width(width, z = 20)) 
 swu <- unique(share_with_df)
-vn <- visNetwork(data.frame(id = people2, title = people2), swu)
+vn <- visNetwork(nodes, edges)
+vn %>% visLegend()
 ```
 
