@@ -7,25 +7,12 @@ output:
     keep_md: yes
 ---
 
-The libraries we'll use (still a little extraneous stuff here to clean up)
+The libraries we'll use 
 
 ```{r libs, message=FALSE, warning=FALSE}
 library(tidyverse)
 library(stringr)
 library(googledrive)
-library(googlesheets)
-library(lubridate)
-library(data.tree)
-library(cowplot)
-library(tictoc)
-theme_set(theme_gray())
-
-# library(network)
-# library(sna)
-#library(GGally)
-library(networkD3)
-library(randomNames) 
-library(igraph)
 library(visNetwork)
 ```
 
@@ -36,8 +23,11 @@ cached = TRUE
 if (! exists('cache_all')) cache_all <- 'all_dhurst79graph.rds'
 if (file.exists(cache_all) && cached) {
     files <- readRDS(cache_all)
+    me <- 'dhurst79@gmail.com'
 } else {
     tic()
+    drive_auth(reset = TRUE)
+    me <- drive_user()$emailAddress
     files <- drive_find()
     saveRDS(files, cache_all)
     toc()
@@ -49,8 +39,6 @@ Let's look at both count and size accumulation over time. Note that file size is
 ```{r data_prep}
 files <- files %>% mutate(shared = map_lgl(drive_resource, 'shared'))
 
-drive_auth()
-me <- drive_user()$emailAddress
 shared <- files %>% filter(shared)
 
 #shrink things down for the interactive demo
