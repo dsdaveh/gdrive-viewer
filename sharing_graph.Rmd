@@ -64,46 +64,10 @@ scale_width <- function(x, z = 10) {
     zz <- xz + 1
 }
 ```
-```{r loops}
-share_with_df <- tibble()
-for (i in 1:nrow(shared)) { ## need to purrrfect this
-    #for (i in 1:17) {
-    xx <- shared[i, ]$drive_resource[[1]]$permissions
-    if(is.null(xx)) next  # gap? Files shared with anyone not added to my Drive
-    owner <- shared[i, ]$drive_resource[[1]]$owners[[1]]$emailAddress 
-    for (j in 1:length(xx)) {
-        if (xx[[j]]$role == 'owner') next
-        ptype <- xx[[j]]$type
-        sharee <- ifelse(ptype == 'user', xx[[j]]$emailAddress, ptype)  # {name} or 'anyone'
-        if (sharee == me) ptype = 'me'
-        share_with_df <- bind_rows(share_with_df,
-                                   tibble(from = owner, to = sharee, group = ptype, arrows = 'to' ))
-    } 
-    if (i %% 250 == 0) print(i)
-}
-nodes <- tibble( id = c(share_with_df$to, share_with_df$from) %>% unique()) %>%
-    mutate( title = str_replace(id, "@.*", ""),
-            group = str_replace(id, ".*@", ""),
-            shape = case_when(id == me ~ 'diamond', id == 'anyone' ~ 'square', TRUE ~ 'circle'))
-            #label = ifelse(id == me, 'me', ''))
-
-#group counts
-domain_count <- nodes %>% count(group) %>% arrange(desc(n))
-keep <- domain_count$group %>% head(5) %>% c('anyone')
-
-nodes <- nodes %>%
-    mutate(group = ifelse(group %in% keep, group, 'other'))
-
-edges <- share_with_df %>%
-    group_by(from, to, group, arrows) %>%
-    summarise(width = n()) %>% ungroup %>%
-    mutate(width = scale_width(width, z = 20)) 
-vn <- visNetwork(nodes, edges)
-vn %>% visLegend()
-```
 
 ```{r}
 process_files <- function(i) {
+    dlc <- shared[i, ]$drive_resource[[1]]
     xx <- shared[i, ]$drive_resource[[1]]$permissions
     #if(is.null(xx)) {return (tibble(from = NA, to = NA, group = NA, arrows = NA ))}
     owner <- shared[i, ]$drive_resource[[1]]$owners[[1]]$emailAddress 
