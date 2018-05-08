@@ -68,10 +68,8 @@ scale_width <- function(x, z = 10) {
 ```{r}
 process_files <- function(i) {
     dlc <- shared[i, ]$drive_resource[[1]]
-    xx <- shared[i, ]$drive_resource[[1]]$permissions
-    #if(is.null(xx)) {return (tibble(from = NA, to = NA, group = NA, arrows = NA ))}
-    owner <- shared[i, ]$drive_resource[[1]]$owners[[1]]$emailAddress 
-    map_dfr(seq_along(xx), gather_pals, xx = xx, owner = owner)
+    owner <- dlc[["owners"]][[1]][["emailAddress"]]
+    map_dfr(seq_along(dlc$permissions), gather_pals, xx = dlc$permissions, owner = owner)
 }
 
 gather_pals <- function(xx, j, owner) {
