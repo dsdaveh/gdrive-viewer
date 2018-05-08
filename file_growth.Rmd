@@ -1,0 +1,231 @@
+---
+title: "Analysis of my Google Drive files (WIP)"
+author: "Dave Hurst"
+output:
+  html_notebook: default
+  html_document:
+    keep_md: yes
+---
+
+
+```{r libs, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(stringr)
+library(googledrive)
+library(googlesheets)
+library(lubridate)
+library(data.tree)
+library(cowplot)
+library(tictoc)
+theme_set(theme_gray())
+```
+
+```{r get_files}
+cached = TRUE
+cache_all <- 'all.rds'
+if (file.exists(cache_all) && cached) {
+    files <- readRDS(cache_all)
+} else {
+    tic()
+    files <- drive_find()
+    saveRDS(files, cache_all)
+    toc()
+}
+```
+
+Let's look at both count and size accumulation over time. Note that file size is only counted for files that are stored in native format (i.e. not Google Docs)
+
+```{r plot_time}
+files <- files %>% googledrive:::promote('createdTime')
+plot_by_count <- files %>% 
+    mutate(createdTime = ymd_hms(createdTime),
+           `Cumulative Doc Count` = row_number(createdTime)) %>% 
+    ggplot(aes(createdTime, `Cumulative Doc Count`, group=1)) + geom_line() + geom_point() +
+    ggtitle('Accumulation by file count')
+
+files <- files %>% googledrive:::promote('quotaBytesUsed') %>% 
+    mutate(q_size = as.numeric(quotaBytesUsed))
+total_size <- sum(files$q_size)
+
+plot_by_size <- files %>% 
+    arrange(createdTime) %>%
+    mutate (createdTime = ymd_hms(createdTime),
+            `Cumulative File Size` = cumsum(q_size)) %>% 
+    ggplot(aes(createdTime, `Cumulative File Size`, group=1)) + geom_line() + geom_point() +
+    ggtitle('Accumulation by file size')
+plot_grid(plot_by_count, plot_by_size)
+```
+
+Interesting. There seem to be several days where a lot of files got added to my Drive. I use the Drive desktop app which automatically syncs files from my PC, so maybe I got a little careless about adding files into that folder. It's also noteworthy that the size explosion and count explosions don't always occur on the same days, so I'll need to look at those separately.  
+
+Total quota file size is `r round(total_size / 1e9, 1)` GB.
+
+Let's start with largest files, and see which Drive paths contain them.
+
+```{r plot_largest}
+fat_files <- files %>% 
+    arrange(-q_size) %>%
+    top_n(10, q_size) %>%
+    drive_reveal(what = 'path') %>%
+    googledrive:::promote('quotaBytesUsed') %>%  #drive_reveal crunched our dribble 
+    mutate(sizeGB = round(as.numeric(quotaBytesUsed) / 1e9, 2))
+fat_files %>% select(path, sizeGB)
+```
+
+There are a couple of files there I don't need or could get online, but otherwise this makes me just want to go watch a few family vids. So a little savings are possible, but nothing much overly noteworthy. The zz_GitHub looks like something I shouldn't be paying to keep around.
+
+Let's look at the files by the chronological order they were added and look at the days with the most volume.
+
+```{r large_files}
+fat_days <- files %>% mutate(create_date = createdTime %>% as.Date() %>% as.character()) %>%
+    count(create_date, sort = TRUE) %>%
+    top_n(10, n)
+fat_days
+```
+
+That's a lot of files. There are probably some folders here that are adding a lot of unnecessary files. Looking up paths can take a long time with the `drive_reveal`. So I want to take a the approach of sampling files added on the days we just identified above. On the assumption that something caused large folders to get added to my drive, this should help me identify those.
+
+```{r large_folders}
+set.seed(199)
+tic()
+fat_day_sample <- files %>% 
+    mutate(create_date = createdTime %>% as.Date() %>% as.character()) %>%
+    semi_join(fat_days) %>%
+    group_by(create_date) %>%
+    mutate(shuffle = sample(n())) %>%
+    top_n(10, shuffle) %>%
+    drive_reveal(what = 'path')
+toc()
+
+#prune until any children of a node don't have a minimum threshold
+prune_min <- 15 #Clone doesn't have ...
+pruneFunction <- function(x) {
+    if (isLeaf(x)) return(FALSE)
+    if (x$totalCount < prune_min) return(FALSE)
+    return( x$totalCount >= prune_min )
+}
+    
+tree <- as.Node(fat_day_sample, pathName = "path")
+pruned <- Clone(tree, pruneFun = pruneFunction)
+print(pruned, 'totalCount', pruneMethod = 'dist', limit = NULL)
+```
+
+```{r get_folders}
+cache_folders <- TRUE
+cache_folders_file <- 'folders.rds'
+if (cache_folders && file.exists(cache_folders_file)) {
+    folders <- readRDS(cache_folders_file)
+} else {
+    tic()
+    folders <- files %>% 
+        drive_reveal(what = 'mime_type') %>% 
+        filter(str_detect(mime_type,'apps.folder$')) %>%
+        drive_reveal(what = 'path') 
+    saveRDS(folders, cache_folders_file)
+    toc()
+}
+
+```
+```{r tree_view}
+ftree <- as.Node(folders, pathName = "path")
+ftree$Do(function(x) x$origCount <- x$count)
+prune_min <- 10 #Clone doesn't have ...
+fpruned <- Clone(ftree, pruneFun = pruneFunction)
+print(fpruned, 'totalCount', 'origCount', pruneMethod = 'dist', limit = NULL)
+```
+
+```{r add_mime}
+files <- files %>% drive_reveal(what = 'mime_type')
+```
+```{r show_mimes}
+file_types <- files %>%
+    group_by(mime_type) %>%
+    summarize(count = n(),
+              total_size = sum(q_size)) %>%
+    arrange( -count)
+file_types
+```
+
+```{r top_types}
+top_ftype <- 10
+file_types %>%
+    top_n(top_ftype, count) %>%
+    mutate(mime_type = reorder(mime_type, count)) %>%
+    ggplot(aes(mime_type, count)) + geom_col() + coord_flip() 
+
+```
+
+```{r top_bysize}
+top_ftype <- 10
+file_types %>%
+    arrange(total_size) %>%
+    top_n(top_ftype, total_size) %>%
+    mutate(mime_type = reorder(mime_type, total_size)) %>%
+    ggplot(aes(mime_type, total_size)) + geom_col() + coord_flip() 
+
+```
+
+
+```{r build_mime_list}
+top_ftype <- 10
+top_mime_types <- file_types %>%
+    top_n(top_ftype, count) %>%
+    select(mime_type) %>% .[[1]]
+top_mime_types
+```
+
+```{r top_bar_other}
+files_otherized <- files %>%
+    mutate(mime_type = ifelse(mime_type %in% top_mime_types, mime_type, 'Other')) 
+files_otherized %>%
+    group_by(mime_type) %>%
+    summarize(count = n(),
+              total_size = sum(q_size)) %>%
+    arrange( -count) %>%
+    mutate(mime_type = reorder(mime_type, count)) %>%
+    ggplot(aes(mime_type, count)) + geom_col() + coord_flip() 
+```
+
+```{r top_size_count}
+files_cum <- files %>% 
+    arrange(createdTime) %>%
+    mutate(create_date = as.Date(ymd_hms(createdTime)),
+           `Cumulative Doc Count` = row_number(createdTime),
+           `Cumulative File Size` = cumsum(q_size)) 
+
+
+cum_types <- files_otherized %>% 
+    mutate(create_date = as.Date(ymd_hms(createdTime))) %>%
+    #filter(create_date > ymd('2017-01-01')) %>%
+    group_by(create_date, mime_type) %>%
+    summarize(count = n(),
+              total_size = sum(q_size)) %>% 
+    ungroup() %>%
+    complete(create_date, mime_type, fill = list(count = 0, total_size = 0)) %>%
+    group_by(mime_type) %>% arrange(create_date) %>%
+    mutate( cum_count = cumsum(count),
+            cum_size = cumsum(total_size)) 
+cum_all <- cum_types %>% ungroup() %>%
+    group_by(create_date) %>%
+    summarize( day_count = sum(count),  
+               day_size = sum(total_size)) %>%
+    ungroup() %>% arrange(create_date) %>%
+    mutate( count_all = cumsum(day_count),
+            size_all = cumsum(day_size))
+    
+plot_cum_counts <- cum_types %>%
+    ggplot(aes(create_date, cum_count)) +
+    geom_area(aes(fill = mime_type)) +
+    geom_line(data = files_cum, aes(create_date, `Cumulative Doc Count`, group=1)) + 
+    geom_point(data = files_cum, aes(create_date, `Cumulative Doc Count`, group=1))
+plot_cum_counts
+```
+
+```{r top_size_other}
+plot_cum_size <- cum_types %>%
+    ggplot(aes(create_date, cum_size)) +
+    geom_area(aes(fill = mime_type)) +
+    geom_line(data = files_cum, aes(create_date, `Cumulative File Size`, group=1)) + 
+    geom_point(data = files_cum, aes(create_date, `Cumulative File Size`, group=1))
+plot_cum_size
+```
