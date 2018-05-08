@@ -34,7 +34,7 @@ if (file.exists(cache_all) && cached) {
 }
 ```
 
-Let's look at both count and size accumulation over time. Note that file size is only counted for files that are stored in native format (i.e. not Google Docs)
+We only want to look at files that are shared. For now we'll restrict that to 200 max.
 
 ```{r data_prep}
 files <- files %>% mutate(shared = map_lgl(drive_resource, 'shared'))
@@ -46,12 +46,15 @@ shared <- files %>% filter(shared)
 max_net <- min(200, nrow(shared))
 shared <- shared[1:max_net, ]
 
+# scaling function for edge widths
 scale_width <- function(x, z = 10) { 
     x0 <- x - min(x)
     xz <- x0 * (z - 1) / max(x0)
     zz <- xz + 1
 }
 ```
+
+Loop through the files and look who they are shared with. Using this information we can create a network graph.
 
 ```{r}
 process_files <- function(i) {
@@ -90,5 +93,6 @@ edges <- share_with_df %>%
     mutate(width = scale_width(width, z = 20)) 
 vn <- visNetwork(nodes, edges)
 vn %>% visLegend()
+# vn %>% visIgraphLayout() # for stable layout
 ```
 
